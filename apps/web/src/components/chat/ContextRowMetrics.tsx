@@ -145,7 +145,6 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
           aria-hidden
         />
         <span className={VALUE_CLASS_NAME}>{tokensPerSecond ?? "–"}</span>
-        <span>tps</span>
       </div>
 
       <Cell
@@ -177,7 +176,6 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
       >
         <Database className={ICON_CLASS_NAME} aria-hidden />
         <span className={VALUE_CLASS_NAME}>{totalTokens !== null ? tokens(totalTokens) : "–"}</span>
-        {totalTokens !== null ? <span>tok</span> : null}
       </Cell>
 
       <Cell

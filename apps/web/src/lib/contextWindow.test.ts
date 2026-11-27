@@ -13,6 +13,7 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import { makeThreadProjectionFixture } from "../test-fixtures";
+import { formatContextWindowTokens } from "./contextWindow";
 import {
   deriveLatestContextWindowSnapshot,
   latestProviderTurnTokenUsage,
@@ -306,5 +307,24 @@ describe("latestProviderTurnTokenUsage", () => {
     ]) {
       expect(latestProviderTurnTokenUsage([], { ...projection, contextTransfers })).toBeNull();
     }
+  });
+});
+
+describe("formatContextWindowTokens", () => {
+  it("keeps short counts exact", () => {
+    expect(formatContextWindowTokens(0)).toBe("0");
+    expect(formatContextWindowTokens(721)).toBe("721");
+  });
+
+  it("uses one decimal below ten thousand and whole thousands above it", () => {
+    expect(formatContextWindowTokens(9_420)).toBe("9.4k");
+    expect(formatContextWindowTokens(71_021)).toBe("71k");
+    expect(formatContextWindowTokens(400_000)).toBe("400k");
+  });
+
+  it("drops the decimal only from ten million up", () => {
+    expect(formatContextWindowTokens(1_240_000)).toBe("1.2m");
+    expect(formatContextWindowTokens(10_500_000)).toBe("11m");
+    expect(formatContextWindowTokens(589_500_000)).toBe("590m");
   });
 });
