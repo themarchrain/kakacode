@@ -74,10 +74,11 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
 
   // Running, the cell reads this turn; idle, it reads the whole session. The tooltip below
   // divides the same two numbers, so the label and the reading never disagree.
-  const live = props.streaming === true;
-  const rate = live
-    ? (session?.lastTurnTokensPerSecond ?? null)
-    : (session?.tokensPerSecond ?? null);
+  const lastTurnRate = session?.lastTurnTokensPerSecond ?? null;
+  // A turn younger than a second has no rate worth showing, so the cell stays on the session
+  // reading until there is one, instead of blanking itself for the first second.
+  const live = props.streaming === true && lastTurnRate !== null;
+  const rate = live ? lastTurnRate : (session?.tokensPerSecond ?? null);
   const tokensPerSecond = rate !== null ? rate.toFixed(1) : null;
   const totalTokens = session !== null && session.totalTokens > 0 ? session.totalTokens : null;
   const cachePercent =
@@ -145,12 +146,9 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
             : gt("Speed unavailable")
         }
         tooltip={
-          session === null ? null : live ? (
+          session === null || tokensPerSecond === null ? null : live ? (
             <>
-              <Row
-                label={gt("This turn's rate")}
-                value={tokensPerSecond !== null ? `${tokensPerSecond} tok/s` : "–"}
-              />
+              <Row label={gt("This turn's rate")} value={`${tokensPerSecond} tok/s`} />
               <Rule />
               <Row label={gt("Turn output")} value={tokens(session.lastTurnOutputTokens ?? 0)} />
               {session.lastTurnDurationMs !== null ? (
@@ -160,7 +158,7 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
                 />
               ) : null}
             </>
-          ) : tokensPerSecond === null ? null : (
+          ) : (
             <>
               <Row label={gt("Session average")} value={`${tokensPerSecond} tok/s`} />
               <Rule />
