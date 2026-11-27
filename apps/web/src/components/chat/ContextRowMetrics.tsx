@@ -37,9 +37,9 @@ const TONE_TEXT: Record<MetricTone, string> = {
   error: "text-error-foreground",
 };
 
-/** One equal column. The divider sits before every cell but the first. */
+/** One equal column, reading as a capsule the moment it is hovered or focused. */
 const CELL_CLASS_NAME =
-  "flex min-w-0 items-center justify-center gap-1 overflow-hidden rounded-md px-1 py-0.5 text-2xs leading-5 whitespace-nowrap text-muted-foreground tabular-nums [&:not(:first-child)]:border-s [&:not(:first-child)]:border-border/60";
+  "mx-0.5 flex min-w-0 items-center justify-center gap-1 overflow-hidden rounded-lg px-1.5 py-1 text-2xs leading-5 whitespace-nowrap text-muted-foreground tabular-nums outline-none transition-colors hover:bg-black/[0.035] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-popup-open:bg-black/[0.035] dark:hover:bg-white/[0.08] dark:data-popup-open:bg-white/[0.08] [&:not(:first-child)]:border-s [&:not(:first-child)]:border-border/60";
 
 const VALUE_CLASS_NAME = "font-medium text-foreground";
 
@@ -133,7 +133,7 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
 
       {/* The speed cell opens nothing: the reading is the whole message. */}
       <div
-        className={CELL_CLASS_NAME}
+        className={cn(CELL_CLASS_NAME, "cursor-default")}
         aria-label={
           tokensPerSecond !== null
             ? gt("{value} tokens per second", { value: tokensPerSecond })
