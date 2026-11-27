@@ -339,6 +339,7 @@ import {
 } from "./chat/PanelLayoutControls";
 import type { ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { ThreadDetailsPanel } from "./chat/ThreadDetailsPanel";
+import { summarizeSessionUsage } from "./chat/contextRowMetrics.logic";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import {
   offersWorkspaceModes,
@@ -594,6 +595,13 @@ export default function ChatView(props: ChatViewProps) {
     serverProjection,
     activeProviderThread,
   );
+  // Sums every provider turn's settled usage, which is what the context row reports as session
+  // totals. Cheaper than a memo and only walks turns that already exist for this projection.
+  const activeThreadSessionUsage = summarizeSessionUsage({
+    turns: (serverProjection?.providerTurns ?? []).map((turn) => turn.turnTokenUsage),
+    durationMs: activeProviderThread?.contextUsage?.durationMs ?? null,
+    toolUses: activeProviderThread?.contextUsage?.toolUses ?? null,
+  });
   const serverVisibleTurnItems = useQuietThreadVisibleTurnItems(routeThreadDetailRef);
   const serverThreadHistory = useThreadHistory(routeThreadDetailRef);
   const threadHistoryControls = (() => {
@@ -4210,6 +4218,7 @@ export default function ChatView(props: ChatViewProps) {
                     providers: providerStatuses,
                     sources: serverConfig?.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES,
                     contextWindow: activeContextWindow,
+                    session: activeThreadSessionUsage,
                   }}
                 />
 
