@@ -1,5 +1,6 @@
 import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
-import { useGT, useLocale } from "gt-react";
+import { formatDuration } from "@t3tools/shared/usageLimitsCopy";
+import { useGT, useLocale, useMessages } from "gt-react";
 import { Database, Layers, Zap } from "lucide-react";
 import { memo, type ReactNode } from "react";
 
@@ -59,6 +60,7 @@ export interface ContextRowMetricsProps {
  */
 export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextRowMetricsProps) {
   const gt = useGT();
+  const m = useMessages();
   const locale = useLocale();
   const { usage, session } = props;
 
@@ -131,13 +133,26 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
         </span>
       </Cell>
 
-      {/* The speed cell opens nothing: the reading is the whole message. */}
-      <div
-        className={cn(CELL_CLASS_NAME, "cursor-default")}
-        aria-label={
+      <Cell
+        ariaLabel={
           tokensPerSecond !== null
             ? gt("{value} tokens per second", { value: tokensPerSecond })
             : gt("Speed unavailable")
+        }
+        tooltip={
+          session !== null && tokensPerSecond !== null ? (
+            <>
+              <Row
+                label={props.streaming === true ? gt("So far") : gt("Session average")}
+                value={`${tokensPerSecond} tok/s`}
+              />
+              <Rule />
+              <Row label={gt("Output tokens")} value={tokens(session.outputTokens)} />
+              {session.durationMs !== null ? (
+                <Row label={gt("Time")} value={formatDuration(session.durationMs, m)} />
+              ) : null}
+            </>
+          ) : null
         }
       >
         <Zap
@@ -145,7 +160,7 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
           aria-hidden
         />
         <span className={VALUE_CLASS_NAME}>{tokensPerSecond ?? "–"}</span>
-      </div>
+      </Cell>
 
       <Cell
         ariaLabel={
