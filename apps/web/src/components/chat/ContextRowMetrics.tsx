@@ -1,12 +1,11 @@
 import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
-import { useGT, useLocale, useMessages } from "gt-react";
+import { useGT, useLocale } from "gt-react";
 import { Database, Layers, Zap } from "lucide-react";
 import { memo, type ReactNode } from "react";
 
 import { formatContextWindowTokens } from "../../lib/contextWindow";
 import { cn } from "../../lib/utils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { formatContextWindowCompactionMessage } from "./compaction.logic";
 import type { SessionUsageSummary } from "./contextRowMetrics.logic";
 
 /** Ring geometry: a 14px viewBox with a 2.4px stroke. */
@@ -60,7 +59,6 @@ export interface ContextRowMetricsProps {
  */
 export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextRowMetricsProps) {
   const gt = useGT();
-  const m = useMessages();
   const locale = useLocale();
   const { usage, session } = props;
 
@@ -69,7 +67,6 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
     maxTokens !== null && usage.usedPercentage !== null
       ? Math.round(Math.max(0, Math.min(100, usage.usedPercentage)))
       : null;
-  const usedTokens = formatContextWindowTokens(usage.usedTokens);
   const threshold = usage.autoCompactThreshold ?? null;
   const tone = ringTone(usedPercent);
 
@@ -78,6 +75,12 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
   const totalTokens = session !== null && session.totalTokens > 0 ? session.totalTokens : null;
   const cachePercent =
     session?.cacheHitRate != null ? Math.round(session.cacheHitRate * 100) : null;
+  const lastCachePercent =
+    session?.lastCacheHitRate != null ? Math.round(session.lastCacheHitRate * 100) : null;
+  const otherTokens = session !== null ? session.otherInputTokens + session.otherOutputTokens : 0;
+
+  const tokens = (value: number) => formatContextWindowTokens(value);
+  const exact = (value: number) => value.toLocaleString(locale);
 
   return (
     <div className="grid grid-cols-4 items-center">
@@ -85,27 +88,17 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
         ariaLabel={
           usedPercent !== null
             ? gt("Context: {percent}% used", { percent: usedPercent })
-            : gt("Context: {tokens} tokens used", { tokens: usedTokens })
+            : gt("Context: {tokens} tokens used", { tokens: tokens(usage.usedTokens) })
         }
         tooltip={
           <>
-            <span className="text-foreground">
-              {usedPercent !== null
-                ? gt("Context: {percent}% used", { percent: usedPercent })
-                : gt("Context: {tokens} tokens used", { tokens: usedTokens })}
-            </span>
-            {maxTokens !== null ? (
-              <span className="text-muted-foreground">
-                {gt("{used} of {max} tokens", {
-                  used: usage.usedTokens.toLocaleString(locale),
-                  max: maxTokens.toLocaleString(locale),
-                })}
-              </span>
-            ) : null}
+            <Row label={gt("Used")} value={exact(usage.usedTokens)} />
+            {maxTokens !== null ? <Row label={gt("Limit")} value={exact(maxTokens)} /> : null}
             {threshold !== null && threshold > 0 ? (
-              <span className="text-muted-foreground">
-                {formatContextWindowCompactionMessage(threshold, m)}
-              </span>
+              <>
+                <Rule />
+                <Row label={gt("Auto-compact")} value={exact(threshold)} />
+              </>
             ) : null}
           </>
         }
@@ -158,53 +151,32 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
       <Cell
         ariaLabel={
           totalTokens !== null
-            ? gt("{value} tokens used this session", {
-                value: formatContextWindowTokens(totalTokens),
-              })
+            ? gt("{value} tokens used this session", { value: tokens(totalTokens) })
             : gt("Session tokens unavailable")
         }
         tooltip={
           session !== null && totalTokens !== null ? (
             <>
-              <span className="text-foreground">
-                {gt("{value} tokens this session", {
-                  value: formatContextWindowTokens(totalTokens),
-                })}
-              </span>
-              <span className="text-muted-foreground">
-                {gt("Input {input} · cache {cached} · output {output}", {
-                  input: formatContextWindowTokens(session.inputTokens),
-                  cached: formatContextWindowTokens(session.cachedInputTokens),
-                  output: formatContextWindowTokens(session.outputTokens),
-                })}
-              </span>
-              {session.otherInputTokens + session.otherOutputTokens > 0 ? (
-                <span className="text-muted-foreground">
-                  {gt("Subagents and compaction {value}", {
-                    value: formatContextWindowTokens(
-                      session.otherInputTokens + session.otherOutputTokens,
-                    ),
-                  })}
-                </span>
+              <Row label={gt("Input")} value={tokens(session.inputTokens)} />
+              <Row label={gt("Cache hits")} value={tokens(session.cachedInputTokens)} />
+              <Row label={gt("Output")} value={tokens(session.outputTokens)} />
+              {otherTokens > 0 ? (
+                <Row label={gt("Subagents and compaction")} value={tokens(otherTokens)} />
               ) : null}
+              <Rule />
+              <Row
+                label={gt("Total")}
+                value={session.partial ? `~${tokens(totalTokens)}` : tokens(totalTokens)}
+              />
               {session.toolUses !== null ? (
-                <span className="text-muted-foreground">
-                  {gt("{count} tool calls", { count: session.toolUses })}
-                </span>
-              ) : null}
-              {session.partial ? (
-                <span className="text-muted-foreground">
-                  {gt("Some turns did not report usage")}
-                </span>
+                <Row label={gt("Tool calls")} value={exact(session.toolUses)} />
               ) : null}
             </>
           ) : null
         }
       >
         <Database className={ICON_CLASS_NAME} aria-hidden />
-        <span className={VALUE_CLASS_NAME}>
-          {totalTokens !== null ? formatContextWindowTokens(totalTokens) : "–"}
-        </span>
+        <span className={VALUE_CLASS_NAME}>{totalTokens !== null ? tokens(totalTokens) : "–"}</span>
         {totalTokens !== null ? <span>tok</span> : null}
       </Cell>
 
@@ -217,15 +189,13 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
         tooltip={
           session !== null && cachePercent !== null ? (
             <>
-              <span className="text-foreground">
-                {gt("Cache hit rate {percent}%", { percent: cachePercent })}
-              </span>
-              <span className="text-muted-foreground">
-                {gt("Cached {cached} of {input} input tokens", {
-                  cached: formatContextWindowTokens(session.cachedInputTokens),
-                  input: formatContextWindowTokens(session.inputTokens),
-                })}
-              </span>
+              <Row label={gt("This session")} value={`${cachePercent}%`} />
+              {lastCachePercent !== null ? (
+                <Row label={gt("This turn")} value={`${lastCachePercent}%`} />
+              ) : null}
+              <Rule />
+              <Row label={gt("Cached")} value={tokens(session.cachedInputTokens)} />
+              <Row label={gt("Input total")} value={tokens(session.inputTokens)} />
             </>
           ) : null
         }
@@ -236,6 +206,20 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
     </div>
   );
 });
+
+/** One label on the left and its reading on the right, at a shared rule. */
+function Row(props: { readonly label: string; readonly value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-6">
+      <span className="text-muted-foreground">{props.label}</span>
+      <span className="font-medium text-foreground tabular-nums">{props.value}</span>
+    </div>
+  );
+}
+
+function Rule() {
+  return <div aria-hidden className="my-0.5 h-px bg-border" />;
+}
 
 function Cell(props: {
   readonly children: ReactNode;
@@ -256,9 +240,9 @@ function Cell(props: {
       >
         {props.children}
       </TooltipTrigger>
-      {/* The popup is a bare box, so each reading needs its own line. */}
+      {/* The popup is a bare box, so the readings need their own column. */}
       <TooltipPopup side="top">
-        <div className="flex flex-col gap-0.5">{props.tooltip}</div>
+        <div className="flex min-w-44 flex-col gap-1">{props.tooltip}</div>
       </TooltipPopup>
     </Tooltip>
   );

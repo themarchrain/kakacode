@@ -21,6 +21,10 @@ export interface SessionUsageSummary {
   readonly tokensPerSecond: number | null;
   /** Tool calls the provider counted across the session, when it reports them. */
   readonly toolUses: number | null;
+  /** Input tokens of the most recent turn that reported any, for the turn-level cache rate. */
+  readonly lastInputTokens: number | null;
+  /** `lastCachedInputTokens / lastInputTokens`, or null when that turn cached nothing. */
+  readonly lastCacheHitRate: number | null;
   /** True when at least one turn reported partial or unavailable usage, so totals run low. */
   readonly partial: boolean;
 }
@@ -36,6 +40,8 @@ const EMPTY_SESSION_USAGE: SessionUsageSummary = {
   durationMs: null,
   tokensPerSecond: null,
   toolUses: null,
+  lastInputTokens: null,
+  lastCacheHitRate: null,
   partial: false,
 };
 
@@ -88,6 +94,8 @@ export function summarizeSessionUsage(input: SessionUsageInput): SessionUsageSum
   let otherOutputTokens = 0;
   let partial = false;
   let turnDurationMs = 0;
+  let lastInputTokens: number | null = null;
+  let lastCachedInputTokens = 0;
 
   for (const turn of input.turns) {
     const usage = turn.usage;
@@ -106,6 +114,12 @@ export function summarizeSessionUsage(input: SessionUsageInput): SessionUsageSum
     outputTokens += positive(usage.outputTokens);
     otherInputTokens += positive(usage.otherUsage?.inputTokens);
     otherOutputTokens += positive(usage.otherUsage?.outputTokens);
+    // Turns arrive in thread order, so the last one that reported input is this turn's.
+    const turnInputTokens = positive(usage.inputTokens);
+    if (turnInputTokens > 0) {
+      lastInputTokens = turnInputTokens;
+      lastCachedInputTokens = positive(usage.cachedInputTokens);
+    }
   }
 
   const reportedDurationMs = positive(input.durationMs ?? undefined);
@@ -126,6 +140,8 @@ export function summarizeSessionUsage(input: SessionUsageInput): SessionUsageSum
     tokensPerSecond:
       durationMs !== null && outputTokens > 0 ? outputTokens / (durationMs / 1000) : null,
     toolUses: input.toolUses != null && input.toolUses > 0 ? input.toolUses : null,
+    lastInputTokens,
+    lastCacheHitRate: lastInputTokens !== null ? lastCachedInputTokens / lastInputTokens : null,
     partial,
   };
 }
