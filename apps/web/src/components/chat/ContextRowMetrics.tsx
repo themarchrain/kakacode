@@ -92,12 +92,12 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
         }
         tooltip={
           <>
-            <Row label={gt("Used")} value={exact(usage.usedTokens)} />
-            {maxTokens !== null ? <Row label={gt("Limit")} value={exact(maxTokens)} /> : null}
+            <Row label={gt("Used")} value={tokens(usage.usedTokens)} />
+            {maxTokens !== null ? <Row label={gt("Limit")} value={tokens(maxTokens)} /> : null}
             {threshold !== null && threshold > 0 ? (
               <>
                 <Rule />
-                <Row label={gt("Auto-compact")} value={exact(threshold)} />
+                <Row label={gt("Auto-compact")} value={tokens(threshold)} />
               </>
             ) : null}
           </>
