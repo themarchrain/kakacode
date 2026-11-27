@@ -609,6 +609,11 @@ export default function ChatView(props: ChatViewProps) {
     durationMs: activeProviderThread?.contextUsage?.durationMs ?? null,
     toolUses: activeProviderThread?.contextUsage?.toolUses ?? null,
   });
+  // The speed cell reads live only while a provider turn is actually producing tokens. The
+  // composer's working state also covers setup, compaction, and background jobs.
+  const activeProviderTurnRunning = (serverProjection?.providerTurns ?? []).some(
+    (turn) => turn.status === "running",
+  );
   const serverVisibleTurnItems = useQuietThreadVisibleTurnItems(routeThreadDetailRef);
   const serverThreadHistory = useThreadHistory(routeThreadDetailRef);
   const threadHistoryControls = (() => {
@@ -4231,7 +4236,7 @@ export default function ChatView(props: ChatViewProps) {
                     sources: serverConfig?.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES,
                     contextWindow: activeContextWindow,
                     session: activeThreadSessionUsage,
-                    streaming: isWorking,
+                    streaming: activeProviderTurnRunning,
                   }}
                 />
 
