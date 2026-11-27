@@ -157,9 +157,9 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
         tooltip={
           session !== null && totalTokens !== null ? (
             <>
-              <Row label={gt("Input")} value={tokens(session.inputTokens)} />
+              <Row label={gt("Input tokens")} value={tokens(session.inputTokens)} />
               <Row label={gt("Cache hits")} value={tokens(session.cachedInputTokens)} />
-              <Row label={gt("Output")} value={tokens(session.outputTokens)} />
+              <Row label={gt("Output tokens")} value={tokens(session.outputTokens)} />
               {otherTokens > 0 ? (
                 <Row label={gt("Subagents and compaction")} value={tokens(otherTokens)} />
               ) : null}
