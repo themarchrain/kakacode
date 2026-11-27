@@ -13059,7 +13059,5 @@
   "0a565bd78ab00e69": "部分轮次未上报用量",
   "9751f6e0c612a3af": "缓存命中率 {percent}%",
   "0d7ab44cdb6b53c3": "缓存命中率不可用",
-  "0ee225b0cae886d7": "输入 {input} token，其中缓存 {cached}",
-  "c882d0d2779c5eed": "会话花费 {value}",
-  "1da23a592d5669ec": "会话花费不可用"
+  "0ee225b0cae886d7": "输入 {input} token，其中缓存 {cached}"
 }

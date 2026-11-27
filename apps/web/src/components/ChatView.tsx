@@ -339,7 +339,10 @@ import {
 } from "./chat/PanelLayoutControls";
 import type { ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { ThreadDetailsPanel } from "./chat/ThreadDetailsPanel";
-import { summarizeSessionUsage } from "./chat/contextRowMetrics.logic";
+import {
+  summarizeSessionUsage,
+  withPersistedContextCapacity,
+} from "./chat/contextRowMetrics.logic";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import {
   offersWorkspaceModes,
@@ -598,7 +601,11 @@ export default function ChatView(props: ChatViewProps) {
   // Sums every provider turn's settled usage, which is what the context row reports as session
   // totals. Cheaper than a memo and only walks turns that already exist for this projection.
   const activeThreadSessionUsage = summarizeSessionUsage({
-    turns: (serverProjection?.providerTurns ?? []).map((turn) => turn.turnTokenUsage),
+    turns: (serverProjection?.providerTurns ?? []).map((turn) => ({
+      usage: turn.turnTokenUsage,
+      startedAt: turn.startedAt,
+      completedAt: turn.completedAt,
+    })),
     durationMs: activeProviderThread?.contextUsage?.durationMs ?? null,
     toolUses: activeProviderThread?.contextUsage?.toolUses ?? null,
   });
@@ -1608,10 +1615,15 @@ export default function ChatView(props: ChatViewProps) {
     isCompacting,
     runlessWorkStartedAt,
   });
-  const activeContextWindow = deriveLatestContextWindowSnapshot(
-    serverVisibleTurnItems ?? [],
-    activeThreadLiveTokenUsage,
-    activeProviderThread,
+  // Live usage reports how much context is used but rarely its capacity, so the persisted
+  // snapshot supplies the limit and the ring keeps reading through the whole turn.
+  const activeContextWindow = withPersistedContextCapacity(
+    deriveLatestContextWindowSnapshot(
+      serverVisibleTurnItems ?? [],
+      activeThreadLiveTokenUsage,
+      activeProviderThread,
+    ),
+    activeProviderThread?.contextUsage,
   );
   const pendingBackgroundTasks = deriveThreadPendingBackgroundTasks(serverProjection);
   const activeWorkStartedAt =
@@ -4219,6 +4231,7 @@ export default function ChatView(props: ChatViewProps) {
                     sources: serverConfig?.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES,
                     contextWindow: activeContextWindow,
                     session: activeThreadSessionUsage,
+                    streaming: isWorking,
                   }}
                 />
 

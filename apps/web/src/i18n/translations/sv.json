@@ -13052,7 +13052,5 @@
   "0a565bd78ab00e69": "Some turns did not report usage",
   "9751f6e0c612a3af": "Cache hit rate {percent}%",
   "0d7ab44cdb6b53c3": "Cache hit rate unavailable",
-  "0ee225b0cae886d7": "Cached {cached} of {input} input tokens",
-  "c882d0d2779c5eed": "Session cost {value}",
-  "1da23a592d5669ec": "Session cost unavailable"
+  "0ee225b0cae886d7": "Cached {cached} of {input} input tokens"
 }

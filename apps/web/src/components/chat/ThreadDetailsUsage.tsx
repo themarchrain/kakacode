@@ -47,6 +47,8 @@ export interface ThreadDetailsUsageInput {
   readonly contextWindow: ContextWindowSnapshot | null;
   /** Session totals across the thread's turns; null while nothing has been reported. */
   readonly session: SessionUsageSummary | null;
+  /** True while a turn is producing tokens, so the speed reading shows as live. */
+  readonly streaming?: boolean | undefined;
 }
 
 type UsageTone = "error" | "warning" | null;
@@ -124,9 +126,11 @@ function InstanceRows({
 export function ThreadDetailsContext({
   usage,
   session,
+  streaming,
 }: {
   readonly usage: ContextWindowSnapshot;
   readonly session: SessionUsageSummary | null;
+  readonly streaming?: boolean | undefined;
 }) {
   const gt = useGT();
   return (
@@ -135,7 +139,7 @@ export function ThreadDetailsContext({
       title={gt("Context window")}
       showHeading={false}
     >
-      <ContextRowMetrics usage={usage} session={session} />
+      <ContextRowMetrics usage={usage} session={session} streaming={streaming} />
     </ThreadDetailsSection>
   );
 }

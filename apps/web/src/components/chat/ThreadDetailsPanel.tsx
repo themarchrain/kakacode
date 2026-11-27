@@ -333,6 +333,7 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                 <ThreadDetailsContext
                   usage={props.usage.contextWindow}
                   session={props.usage.session}
+                  streaming={props.usage.streaming}
                 />
               ) : null}
 

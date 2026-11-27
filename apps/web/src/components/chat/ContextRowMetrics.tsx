@@ -1,6 +1,6 @@
 import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
 import { useGT, useLocale, useMessages } from "gt-react";
-import { CircleDollarSign, Database, Layers, Zap } from "lucide-react";
+import { Database, Layers, Zap } from "lucide-react";
 import { memo, type ReactNode } from "react";
 
 import { formatContextWindowTokens } from "../../lib/contextWindow";
@@ -38,9 +38,9 @@ const TONE_TEXT: Record<MetricTone, string> = {
   error: "text-error-foreground",
 };
 
-/** Shared cell chrome: one equal column, a divider before every cell but the first. */
+/** One equal column. The divider sits before every cell but the first. */
 const CELL_CLASS_NAME =
-  "flex min-w-0 items-center justify-center gap-1 rounded-md px-1 py-0.5 text-2xs leading-5 text-muted-foreground tabular-nums [&:not(:first-child)]:border-s [&:not(:first-child)]:border-border/60";
+  "flex min-w-0 items-center justify-center gap-1 overflow-hidden rounded-md px-1 py-0.5 text-2xs leading-5 whitespace-nowrap text-muted-foreground tabular-nums [&:not(:first-child)]:border-s [&:not(:first-child)]:border-border/60";
 
 const VALUE_CLASS_NAME = "font-medium text-foreground";
 
@@ -50,15 +50,13 @@ export interface ContextRowMetricsProps {
   readonly usage: ContextWindowSnapshot;
   /** Session totals across every turn; null while the thread has only live usage. */
   readonly session: SessionUsageSummary | null;
-  /** Provider-reported session cost, when the provider reports one. */
-  readonly costUsd?: number | null;
   /** True while a turn is producing tokens, so the speed icon reads as live. */
-  readonly streaming?: boolean;
+  readonly streaming?: boolean | undefined;
 }
 
 /**
- * The thread's context window, read as five equal cells: occupancy ring, output speed,
- * session tokens, cache hit rate, and cost. Each cell but the speed opens a tooltip.
+ * The thread's context window, read as four equal cells: occupancy ring, output speed,
+ * session tokens, and cache hit rate. Every cell but the speed opens a tooltip.
  */
 export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextRowMetricsProps) {
   const gt = useGT();
@@ -80,10 +78,9 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
   const totalTokens = session !== null && session.totalTokens > 0 ? session.totalTokens : null;
   const cachePercent =
     session?.cacheHitRate != null ? Math.round(session.cacheHitRate * 100) : null;
-  const cost = props.costUsd != null && Number.isFinite(props.costUsd) ? props.costUsd : null;
 
   return (
-    <div className="grid grid-cols-5 items-center">
+    <div className="grid grid-cols-4 items-center">
       <Cell
         ariaLabel={
           usedPercent !== null
@@ -151,7 +148,7 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
         }
       >
         <Zap
-          className={cn(ICON_CLASS_NAME, props.streaming === true && "opacity-100 text-success")}
+          className={cn(ICON_CLASS_NAME, props.streaming === true && "text-success opacity-100")}
           aria-hidden
         />
         <span className={VALUE_CLASS_NAME}>{tokensPerSecond ?? "–"}</span>
@@ -236,36 +233,9 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
         <Layers className={ICON_CLASS_NAME} aria-hidden />
         <span className={VALUE_CLASS_NAME}>{cachePercent !== null ? `${cachePercent}%` : "–"}</span>
       </Cell>
-
-      <Cell
-        ariaLabel={
-          cost !== null
-            ? gt("Session cost {value}", { value: formatCost(cost, locale) })
-            : gt("Session cost unavailable")
-        }
-        tooltip={
-          cost !== null ? (
-            <span className="text-foreground">
-              {gt("Session cost {value}", { value: formatCost(cost, locale) })}
-            </span>
-          ) : null
-        }
-      >
-        <CircleDollarSign className={ICON_CLASS_NAME} aria-hidden />
-        <span className={VALUE_CLASS_NAME}>{cost !== null ? formatCost(cost, locale) : "–"}</span>
-      </Cell>
     </div>
   );
 });
-
-/** Costs come from the pricing table, which is denominated in US dollars. */
-function formatCost(amount: number, locale: string): string {
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: amount < 1 ? 3 : 2,
-  }).format(amount);
-}
 
 function Cell(props: {
   readonly children: ReactNode;
@@ -286,7 +256,10 @@ function Cell(props: {
       >
         {props.children}
       </TooltipTrigger>
-      <TooltipPopup side="top">{props.tooltip}</TooltipPopup>
+      {/* The popup is a bare box, so each reading needs its own line. */}
+      <TooltipPopup side="top">
+        <div className="flex flex-col gap-0.5">{props.tooltip}</div>
+      </TooltipPopup>
     </Tooltip>
   );
 }

@@ -1,3 +1,4 @@
+import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
 import type { TurnTokenUsage } from "@t3tools/contracts";
 
 /** Session totals summed from turns. Avoids `totalProcessedTokens`, which is null mid-stream
@@ -14,7 +15,7 @@ export interface SessionUsageSummary {
   readonly totalTokens: number;
   /** `cachedInputTokens / inputTokens`, or null when no input was reported. */
   readonly cacheHitRate: number | null;
-  /** Summed provider-reported turn duration, or null when no turn reported one. */
+  /** Summed turn duration, or null when no turn reported one. */
   readonly durationMs: number | null;
   /** Session average output speed in tokens per second, or null without a duration. */
   readonly tokensPerSecond: number | null;
@@ -24,7 +25,7 @@ export interface SessionUsageSummary {
   readonly partial: boolean;
 }
 
-const EMPTY: SessionUsageSummary = {
+const EMPTY_SESSION_USAGE: SessionUsageSummary = {
   inputTokens: 0,
   cachedInputTokens: 0,
   outputTokens: 0,
@@ -38,20 +39,45 @@ const EMPTY: SessionUsageSummary = {
   partial: false,
 };
 
-function finite(value: number | undefined): number {
+function positive(value: number | undefined): number {
   return value !== undefined && Number.isFinite(value) && value > 0 ? value : 0;
 }
 
+/** One provider turn: its settled usage and the window it ran in. */
+export interface SessionUsageTurn {
+  readonly usage?: TurnUsageValue;
+  readonly startedAt?: SessionUsageTimestamp;
+  readonly completedAt?: SessionUsageTimestamp;
+}
+
+type TurnUsageValue = TurnTokenUsage | null | undefined;
+
+/** A timestamp as the contracts decode it, an ISO string, or raw milliseconds. */
+export type SessionUsageTimestamp =
+  | string
+  | number
+  | { readonly epochMilliseconds: number }
+  | null
+  | undefined;
+
+function epochMillis(value: SessionUsageTimestamp): number {
+  if (value === null || value === undefined) return Number.NaN;
+  if (typeof value === "number") return value;
+  if (typeof value === "string") return Date.parse(value);
+  return value.epochMilliseconds;
+}
+
 export interface SessionUsageInput {
-  /** Per-turn settled usage, in thread order. Turns without usage are skipped. */
-  readonly turns: readonly (TurnTokenUsage | null | undefined)[];
+  /** Every provider turn of the thread, in thread order. */
+  readonly turns: readonly SessionUsageTurn[];
+  /** A provider-reported total, used only when no turn carries both timestamps. */
   readonly durationMs?: number | null;
   readonly toolUses?: number | null;
 }
 
 /**
  * Sum a thread's turns into one session reading.
- * @param input - the thread's per-turn usage.
+ * @param input - the thread's provider turns and any provider-reported totals.
  * @returns totals, cache hit rate, and average speed; zeros when nothing reported usage.
  */
 export function summarizeSessionUsage(input: SessionUsageInput): SessionUsageSummary {
@@ -61,22 +87,31 @@ export function summarizeSessionUsage(input: SessionUsageInput): SessionUsageSum
   let otherInputTokens = 0;
   let otherOutputTokens = 0;
   let partial = false;
+  let turnDurationMs = 0;
 
   for (const turn of input.turns) {
-    if (turn === null || turn === undefined) continue;
+    const usage = turn.usage;
+    // A turn's own window is the only duration that survives compaction, so sum it here.
+    const startedAt = epochMillis(turn.startedAt);
+    const completedAt = epochMillis(turn.completedAt);
+    if (Number.isFinite(startedAt) && Number.isFinite(completedAt) && completedAt > startedAt) {
+      turnDurationMs += completedAt - startedAt;
+    }
+    if (usage === null || usage === undefined) continue;
     // A local command's counters describe that command, not model work.
-    if (turn.localCommand === true) continue;
-    if (turn.usageStatus !== "complete") partial = true;
-    inputTokens += finite(turn.inputTokens);
-    cachedInputTokens += finite(turn.cachedInputTokens);
-    outputTokens += finite(turn.outputTokens);
-    otherInputTokens += finite(turn.otherUsage?.inputTokens);
-    otherOutputTokens += finite(turn.otherUsage?.outputTokens);
+    if (usage.localCommand === true) continue;
+    if (usage.usageStatus !== "complete") partial = true;
+    inputTokens += positive(usage.inputTokens);
+    cachedInputTokens += positive(usage.cachedInputTokens);
+    outputTokens += positive(usage.outputTokens);
+    otherInputTokens += positive(usage.otherUsage?.inputTokens);
+    otherOutputTokens += positive(usage.otherUsage?.outputTokens);
   }
 
-  const durationMs = input.durationMs != null && input.durationMs > 0 ? input.durationMs : null;
+  const reportedDurationMs = positive(input.durationMs ?? undefined);
+  const durationMs = turnDurationMs > 0 ? turnDurationMs : reportedDurationMs || null;
   const totalTokens = inputTokens + outputTokens + otherInputTokens + otherOutputTokens;
-  if (totalTokens === 0 && durationMs === null) return EMPTY;
+  if (totalTokens === 0 && durationMs === null) return EMPTY_SESSION_USAGE;
 
   return {
     inputTokens,
@@ -92,5 +127,30 @@ export function summarizeSessionUsage(input: SessionUsageInput): SessionUsageSum
       durationMs !== null && outputTokens > 0 ? outputTokens / (durationMs / 1000) : null,
     toolUses: input.toolUses != null && input.toolUses > 0 ? input.toolUses : null,
     partial,
+  };
+}
+
+/**
+ * Keep the occupancy reading while a turn streams.
+ *
+ * Live usage carries the used count but usually no capacity, so the ring would fall back to a
+ * placeholder for the whole turn. The thread's persisted snapshot still knows the capacity.
+ */
+export function withPersistedContextCapacity(
+  snapshot: ContextWindowSnapshot | null,
+  persisted: { readonly maxTokens?: number | undefined } | null | undefined,
+): ContextWindowSnapshot | null {
+  if (snapshot === null) return null;
+  if (snapshot.maxTokens != null && snapshot.maxTokens > 0) return snapshot;
+  const maxTokens = persisted?.maxTokens;
+  if (maxTokens == null || !Number.isFinite(maxTokens) || maxTokens <= 0) return snapshot;
+  const usedPercentage =
+    snapshot.usedTokens > 0 ? Math.min(100, (snapshot.usedTokens / maxTokens) * 100) : 0;
+  return {
+    ...snapshot,
+    maxTokens,
+    usedPercentage,
+    remainingTokens: Math.max(0, Math.round(maxTokens - snapshot.usedTokens)),
+    remainingPercentage: Math.max(0, 100 - usedPercentage),
   };
 }
