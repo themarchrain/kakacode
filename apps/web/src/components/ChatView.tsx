@@ -603,6 +603,7 @@ export default function ChatView(props: ChatViewProps) {
   const activeThreadSessionUsage = summarizeSessionUsage({
     turns: (serverProjection?.providerTurns ?? []).map((turn) => ({
       usage: turn.turnTokenUsage,
+      liveUsage: turn.tokenUsage,
       startedAt: turn.startedAt,
       completedAt: turn.completedAt,
     })),

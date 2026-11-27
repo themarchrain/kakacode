@@ -72,8 +72,13 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
   const threshold = usage.autoCompactThreshold ?? null;
   const tone = ringTone(usedPercent);
 
-  const tokensPerSecond =
-    session?.tokensPerSecond != null ? session.tokensPerSecond.toFixed(1) : null;
+  // Running, the cell reads this turn; idle, it reads the whole session. The tooltip below
+  // divides the same two numbers, so the label and the reading never disagree.
+  const live = props.streaming === true;
+  const rate = live
+    ? (session?.lastTurnTokensPerSecond ?? null)
+    : (session?.tokensPerSecond ?? null);
+  const tokensPerSecond = rate !== null ? rate.toFixed(1) : null;
   const totalTokens = session !== null && session.totalTokens > 0 ? session.totalTokens : null;
   const cachePercent =
     session?.cacheHitRate != null ? Math.round(session.cacheHitRate * 100) : null;
@@ -140,19 +145,31 @@ export const ContextRowMetrics = memo(function ContextRowMetrics(props: ContextR
             : gt("Speed unavailable")
         }
         tooltip={
-          session !== null && tokensPerSecond !== null ? (
+          session === null ? null : live ? (
             <>
               <Row
-                label={props.streaming === true ? gt("So far") : gt("Session average")}
-                value={`${tokensPerSecond} tok/s`}
+                label={gt("This turn's rate")}
+                value={tokensPerSecond !== null ? `${tokensPerSecond} tok/s` : "–"}
               />
+              <Rule />
+              <Row label={gt("Turn output")} value={tokens(session.lastTurnOutputTokens ?? 0)} />
+              {session.lastTurnDurationMs !== null ? (
+                <Row
+                  label={gt("Turn time")}
+                  value={formatDuration(session.lastTurnDurationMs, m)}
+                />
+              ) : null}
+            </>
+          ) : tokensPerSecond === null ? null : (
+            <>
+              <Row label={gt("Session average")} value={`${tokensPerSecond} tok/s`} />
               <Rule />
               <Row label={gt("Output tokens")} value={tokens(session.outputTokens)} />
               {session.durationMs !== null ? (
                 <Row label={gt("Time")} value={formatDuration(session.durationMs, m)} />
               ) : null}
             </>
-          ) : null
+          )
         }
       >
         <Zap

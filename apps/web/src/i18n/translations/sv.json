@@ -13058,7 +13058,9 @@
   "20b612a0474e1f6f": "Input total",
   "17554cfe5cad2ded": "Input tokens",
   "8435cf543bf90afc": "Output tokens",
-  "e0448ff7ea4aab4e": "So far",
   "a010a9bba1e250f9": "Session average",
-  "001dec08c2317790": "Time"
+  "001dec08c2317790": "Time",
+  "ccbaf6abda4f1f00": "This turn's rate",
+  "20b80869866e0f9f": "Turn output",
+  "867ea5ab6dd29f69": "Turn time"
 }

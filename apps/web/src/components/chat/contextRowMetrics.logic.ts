@@ -21,6 +21,12 @@ export interface SessionUsageSummary {
   readonly tokensPerSecond: number | null;
   /** Tool calls the provider counted across the session, when it reports them. */
   readonly toolUses: number | null;
+  /** Output tokens of the last turn alone, used while that turn is still producing them. */
+  readonly lastTurnOutputTokens: number | null;
+  /** That turn's time: settled between its timestamps, or the latest live report while running. */
+  readonly lastTurnDurationMs: number | null;
+  /** Its output speed, or null under one second where the sample is too small to mean anything. */
+  readonly lastTurnTokensPerSecond: number | null;
   /** Input tokens of the most recent turn that reported any, for the turn-level cache rate. */
   readonly lastInputTokens: number | null;
   /** `lastCachedInputTokens / lastInputTokens`, or null when that turn cached nothing. */
@@ -40,21 +46,34 @@ const EMPTY_SESSION_USAGE: SessionUsageSummary = {
   durationMs: null,
   tokensPerSecond: null,
   toolUses: null,
+  lastTurnOutputTokens: null,
+  lastTurnDurationMs: null,
+  lastTurnTokensPerSecond: null,
   lastInputTokens: null,
   lastCacheHitRate: null,
   partial: false,
 };
 
+/** Below this, the divisor is too small for a rate to mean anything. */
+const MIN_RATE_SAMPLE_MS = 1_000;
+
 function positive(value: number | undefined): number {
   return value !== undefined && Number.isFinite(value) && value > 0 ? value : 0;
 }
 
-/** One provider turn: its settled usage and the window it ran in. */
+/** One provider turn: its settled usage, its live usage, and the window it ran in. */
 export interface SessionUsageTurn {
   readonly usage?: TurnUsageValue;
+  /** Provider reports during the turn, before its usage settles. */
+  readonly liveUsage?: LiveUsageValue;
   readonly startedAt?: SessionUsageTimestamp;
   readonly completedAt?: SessionUsageTimestamp;
 }
+
+type LiveUsageValue =
+  | { readonly outputTokens?: number | undefined; readonly updatedAt?: SessionUsageTimestamp }
+  | null
+  | undefined;
 
 type TurnUsageValue = TurnTokenUsage | null | undefined;
 
@@ -122,10 +141,30 @@ export function summarizeSessionUsage(input: SessionUsageInput): SessionUsageSum
     }
   }
 
+  const lastTurn = input.turns.at(-1);
+  let lastTurnOutputTokens: number | null = null;
+  let lastTurnDurationMs: number | null = null;
+  if (lastTurn !== undefined) {
+    const settled = lastTurn.usage?.localCommand === true ? null : (lastTurn.usage ?? null);
+    const elapsedOutput = settled === null ? positive(lastTurn.liveUsage?.outputTokens) : 0;
+    const output = settled === null ? elapsedOutput : positive(settled.outputTokens);
+    if (output > 0) lastTurnOutputTokens = output;
+    const startedAt = epochMillis(lastTurn.startedAt);
+    // A settled turn measures between its own timestamps. A running one measures to the
+    // provider's latest report, which arrives with the usage rather than from a clock here.
+    const settledEnd = epochMillis(lastTurn.completedAt);
+    const reportedEnd = epochMillis(lastTurn.liveUsage?.updatedAt);
+    const end = settledEnd > startedAt ? settledEnd : reportedEnd;
+    if (Number.isFinite(end) && end > startedAt) lastTurnDurationMs = end - startedAt;
+  }
+
   const reportedDurationMs = positive(input.durationMs ?? undefined);
   const durationMs = turnDurationMs > 0 ? turnDurationMs : reportedDurationMs || null;
   const totalTokens = inputTokens + outputTokens + otherInputTokens + otherOutputTokens;
-  if (totalTokens === 0 && durationMs === null) return EMPTY_SESSION_USAGE;
+  // A first turn still running has no settled usage yet, but it does have a live report.
+  if (totalTokens === 0 && durationMs === null && lastTurnOutputTokens === null) {
+    return EMPTY_SESSION_USAGE;
+  }
 
   return {
     inputTokens,
@@ -142,6 +181,14 @@ export function summarizeSessionUsage(input: SessionUsageInput): SessionUsageSum
     toolUses: input.toolUses != null && input.toolUses > 0 ? input.toolUses : null,
     lastInputTokens,
     lastCacheHitRate: lastInputTokens !== null ? lastCachedInputTokens / lastInputTokens : null,
+    lastTurnOutputTokens,
+    lastTurnDurationMs,
+    lastTurnTokensPerSecond:
+      lastTurnDurationMs !== null &&
+      lastTurnOutputTokens !== null &&
+      lastTurnDurationMs >= MIN_RATE_SAMPLE_MS
+        ? lastTurnOutputTokens / (lastTurnDurationMs / 1000)
+        : null,
     partial,
   };
 }
